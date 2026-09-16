@@ -17,6 +17,8 @@ export interface Homework {
   completed: boolean;
 }
 
+export type WeekType = 'all' | 'A' | 'B';
+
 export interface ScheduleItem {
   id: string;
   day: 'Понеділок' | 'Вівторок' | 'Середа' | 'Четвер' | 'П’ятниця';
@@ -24,9 +26,10 @@ export interface ScheduleItem {
   subject: string;
   room: string;
   time: string;
+  weekType: WeekType; // 'all' - щотижня, 'A' - зелений, 'B' - червоний
 }
 
-// === РОЗКЛАД ДЗВІНКІВ ЗА ЗМОВЧУВАННЯМ ===
+// === РОЗКЛАД ДЗВІНКІВ ===
 const DEFAULT_BELLS: Record<number, string> = {
   1: '08:30 - 09:15',
   2: '09:25 - 10:10',
@@ -130,7 +133,6 @@ const loginUser = async (email: string, pass: string): Promise<User> => {
 
 // === ГОЛОВНИЙ КОМПОНЕНТ ===
 const App: React.FC = () => {
-  // Стан теми ('dark' або 'light')
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const savedTheme = localStorage.getItem('theme_mode');
     return savedTheme === 'light' ? 'light' : 'dark';
@@ -145,13 +147,12 @@ const App: React.FC = () => {
   const isDark = theme === 'dark';
   const currentStyles = getThemeStyles(isDark);
 
-  // Користувач
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('current_school_user');
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Авторизація
+  // Auth
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -159,12 +160,11 @@ const App: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Локальний розклад та завдання для поточного емейлу
+  // Local Storage Key per Email
   const userKey = currentUser ? currentUser.email.toLowerCase() : 'guest';
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [homeworks, setHomeworks] = useState<Homework[]>([]);
 
-  // Завантаження даних при зміні користувача
   useEffect(() => {
     if (currentUser) {
       const savedSchedule = localStorage.getItem(`schedule_${userKey}`);
@@ -198,6 +198,7 @@ const App: React.FC = () => {
   const [lessonSubject, setLessonSubject] = useState('');
   const [lessonRoom, setLessonRoom] = useState('');
   const [lessonTime, setLessonTime] = useState(DEFAULT_BELLS[1]);
+  const [lessonWeekType, setLessonWeekType] = useState<WeekType>('all');
 
   // Поля ДЗ
   const [hwSubject, setHwSubject] = useState('');
@@ -211,7 +212,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Auth обробники
+  // Auth
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -251,6 +252,7 @@ const App: React.FC = () => {
               subject: lessonSubject,
               room: lessonRoom,
               time: lessonTime,
+              weekType: lessonWeekType,
             }
           : item
       );
@@ -264,6 +266,7 @@ const App: React.FC = () => {
         subject: lessonSubject,
         room: lessonRoom,
         time: lessonTime,
+        weekType: lessonWeekType,
       };
 
       updateSchedule([...schedule, newItem]);
@@ -277,6 +280,7 @@ const App: React.FC = () => {
     setLessonSubject(item.subject);
     setLessonRoom(item.room);
     setLessonTime(item.time || DEFAULT_BELLS[item.lessonNumber] || '');
+    setLessonWeekType(item.weekType || 'all');
   };
 
   const cancelEditing = () => {
@@ -289,6 +293,7 @@ const App: React.FC = () => {
     setLessonRoom('');
     setLessonNumber(nextNum);
     setLessonTime(DEFAULT_BELLS[nextNum] || '');
+    setLessonWeekType('all');
   };
 
   const deleteScheduleItem = (id: string) => {
@@ -325,7 +330,6 @@ const App: React.FC = () => {
     updateHomeworks(homeworks.filter((hw: Homework) => hw.id !== id));
   };
 
-  // Екран Авторизації
   if (!currentUser) {
     return (
       <div style={currentStyles.authContainer}>
@@ -390,13 +394,13 @@ const App: React.FC = () => {
   }
 
   const days: ScheduleItem['day'][] = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'П’ятниця'];
-  const filteredSchedule = schedule
-    .filter((s: ScheduleItem) => s.day === activeDay)
-    .sort((a: ScheduleItem, b: ScheduleItem) => a.lessonNumber - b.lessonNumber);
+  
+  // Групуємо уроки за номером уроку для гарного відображення варіантів А / В
+  const daySchedule = schedule.filter((s: ScheduleItem) => s.day === activeDay);
+  const lessonNumbers = Array.from(new Set(daySchedule.map((s) => s.lessonNumber))).sort((a, b) => a - b);
 
   return (
     <div style={currentStyles.appContainer}>
-      {/* Шапка */}
       <header style={currentStyles.header}>
         <div style={currentStyles.headerInfo}>
           <span style={currentStyles.headerBadge}>STUDY HUB</span>
@@ -413,7 +417,6 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Навігація */}
       <nav style={currentStyles.tabNav}>
         <button
           onClick={() => setActiveTab('schedule')}
@@ -450,7 +453,7 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            {/* Форма уроку */}
+            {/* Форма додавання / редагування уроку */}
             <form onSubmit={handleScheduleSubmit} style={currentStyles.cardForm}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h4 style={currentStyles.formTitle}>
@@ -471,7 +474,7 @@ const App: React.FC = () => {
                   placeholder="№"
                   value={lessonNumber}
                   onChange={(e) => handleLessonNumberChange(Number(e.target.value))}
-                  style={{ ...currentStyles.input, width: '65px' }}
+                  style={{ ...currentStyles.input, width: '60px' }}
                   required
                 />
                 <input
@@ -484,7 +487,7 @@ const App: React.FC = () => {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                 <input
                   type="text"
                   placeholder="Кабінет (напр. 204)"
@@ -497,8 +500,36 @@ const App: React.FC = () => {
                   placeholder="Час (08:30 - 09:15)"
                   value={lessonTime}
                   onChange={(e) => setLessonTime(e.target.value)}
-                  style={{ ...currentStyles.input, flex: 1.4 }}
+                  style={{ ...currentStyles.input, flex: 1.3 }}
                 />
+              </div>
+
+              {/* Вибір Зеленого / Червоного тижня */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={currentStyles.labelLabel}>Тиждень чисельника/знаменника:</label>
+                <div style={currentStyles.weekTypeSelector}>
+                  <button
+                    type="button"
+                    onClick={() => setLessonWeekType('all')}
+                    style={lessonWeekType === 'all' ? currentStyles.weekBtnActiveAll : currentStyles.weekBtn}
+                  >
+                    Щотижня
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLessonWeekType('A')}
+                    style={lessonWeekType === 'A' ? currentStyles.weekBtnActiveA : currentStyles.weekBtn}
+                  >
+                    А (Зелений)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLessonWeekType('B')}
+                    style={lessonWeekType === 'B' ? currentStyles.weekBtnActiveB : currentStyles.weekBtn}
+                  >
+                    В (Червоний)
+                  </button>
+                </div>
               </div>
 
               <button type="submit" style={editingLessonId ? currentStyles.btnSave : currentStyles.btnPrimary}>
@@ -514,46 +545,60 @@ const App: React.FC = () => {
 
             {/* Список уроків */}
             <div style={currentStyles.list}>
-              {filteredSchedule.length === 0 ? (
+              {lessonNumbers.length === 0 ? (
                 <div style={currentStyles.emptyState}>Розклад на цей день порожній</div>
               ) : (
-                filteredSchedule.map((item: ScheduleItem) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      ...currentStyles.cardItem,
-                      borderLeft: editingLessonId === item.id ? '4px solid #6366f1' : '4px solid transparent',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div style={currentStyles.lessonNumBadge}>{item.lessonNumber}</div>
-                      <div>
-                        <div style={currentStyles.subjectTitle}>{item.subject}</div>
-                        <div style={currentStyles.metaInfo}>
-                          {item.room && <span>Каб. {item.room}</span>}
-                          {item.room && item.time && <span> • </span>}
-                          {item.time && <span>{item.time}</span>}
+                lessonNumbers.map((num) => {
+                  const itemsForNum = daySchedule.filter((item) => item.lessonNumber === num);
+                  const firstItem = itemsForNum[0];
+
+                  return (
+                    <div key={num} style={currentStyles.cardItem}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
+                        <div style={currentStyles.lessonNumBadge}>{num}</div>
+                        
+                        <div style={{ flex: 1 }}>
+                          {/* Рендеримо всі уроки на цей час (якщо їх 2 — А і В) */}
+                          {itemsForNum.map((item) => (
+                            <div key={item.id} style={currentStyles.lessonRow}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+                                {item.weekType === 'A' && (
+                                  <span style={{ color: '#22c55e', fontWeight: 'bold', fontSize: '15px' }}>A:</span>
+                                )}
+                                {item.weekType === 'B' && (
+                                  <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '15px' }}>B:</span>
+                                )}
+                                <span style={currentStyles.subjectTitle}>{item.subject}</span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {item.room && <span style={currentStyles.roomBadge}>{item.room}</span>}
+                                <button
+                                  onClick={() => startEditLesson(item)}
+                                  style={currentStyles.btnAction}
+                                  title="Редагувати"
+                                >
+                                  <Icons.Edit />
+                                </button>
+                                <button
+                                  onClick={() => deleteScheduleItem(item.id)}
+                                  style={{ ...currentStyles.btnAction, color: '#f43f5e' }}
+                                  title="Видалити"
+                                >
+                                  <Icons.Trash />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {firstItem.time && (
+                            <div style={currentStyles.metaInfo}>{firstItem.time}</div>
+                          )}
                         </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        onClick={() => startEditLesson(item)}
-                        style={currentStyles.btnAction}
-                        title="Редагувати"
-                      >
-                        <Icons.Edit />
-                      </button>
-                      <button
-                        onClick={() => deleteScheduleItem(item.id)}
-                        style={{ ...currentStyles.btnAction, color: '#f43f5e' }}
-                        title="Видалити"
-                      >
-                        <Icons.Trash />
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -642,7 +687,7 @@ const App: React.FC = () => {
   );
 };
 
-// === ДИНАМІЧНІ СТИЛІ (Темна / Світла тема) ===
+// === ДИНАМІЧНІ СТИЛІ ===
 function getThemeStyles(isDark: boolean): { [key: string]: React.CSSProperties } {
   return {
     appContainer: {
@@ -653,7 +698,6 @@ function getThemeStyles(isDark: boolean): { [key: string]: React.CSSProperties }
       color: isDark ? '#f8fafc' : '#0f172a',
       minHeight: '100vh',
       paddingBottom: '24px',
-      transition: 'all 0.2s ease',
     },
     header: {
       display: 'flex',
@@ -772,13 +816,65 @@ function getThemeStyles(isDark: boolean): { [key: string]: React.CSSProperties }
       borderRadius: '12px',
       border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
       marginBottom: '16px',
-      boxShadow: isDark ? 'none' : '0 1px 3px rgba(0,0,0,0.05)',
     },
     formTitle: {
       margin: 0,
       fontSize: '14px',
       fontWeight: 600,
       color: isDark ? '#cbd5e1' : '#334155',
+    },
+    labelLabel: {
+      fontSize: '12px',
+      color: isDark ? '#94a3b8' : '#64748b',
+      display: 'block',
+      marginBottom: '6px',
+    },
+    weekTypeSelector: {
+      display: 'flex',
+      gap: '6px',
+    },
+    weekBtn: {
+      flex: 1,
+      padding: '8px 0',
+      borderRadius: '6px',
+      border: isDark ? '1px solid #334155' : '1px solid #cbd5e1',
+      background: isDark ? '#0f172a' : '#f8fafc',
+      color: isDark ? '#94a3b8' : '#64748b',
+      fontSize: '12px',
+      cursor: 'pointer',
+    },
+    weekBtnActiveAll: {
+      flex: 1,
+      padding: '8px 0',
+      borderRadius: '6px',
+      border: '1px solid #6366f1',
+      background: '#6366f1',
+      color: '#fff',
+      fontSize: '12px',
+      fontWeight: 600,
+      cursor: 'pointer',
+    },
+    weekBtnActiveA: {
+      flex: 1,
+      padding: '8px 0',
+      borderRadius: '6px',
+      border: '1px solid #22c55e',
+      background: '#22c55e',
+      color: '#fff',
+      fontSize: '12px',
+      fontWeight: 600,
+      cursor: 'pointer',
+    },
+    weekBtnActiveB: {
+      flex: 1,
+      padding: '8px 0',
+      borderRadius: '6px',
+      border: '1px solid #ef4444',
+      background: '#ef4444',
+      color: '#fff',
+      fontSize: '12px',
+      fontWeight: 600,
+      cursor: 'pointer',
     },
     input: {
       width: '100%',
@@ -787,7 +883,7 @@ function getThemeStyles(isDark: boolean): { [key: string]: React.CSSProperties }
       border: isDark ? '1px solid #334155' : '1px solid #cbd5e1',
       background: isDark ? '#0f172a' : '#f8fafc',
       color: isDark ? '#f8fafc' : '#0f172a',
-      fontSize: '14px',
+      fontSize: '16px', // 16px щоб iPhone не зумив
       boxSizing: 'border-box',
       outline: 'none',
     },
@@ -837,14 +933,16 @@ function getThemeStyles(isDark: boolean): { [key: string]: React.CSSProperties }
       gap: '10px',
     },
     cardItem: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
       background: isDark ? '#1e293b' : '#ffffff',
       padding: '12px 14px',
       borderRadius: '10px',
       border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
-      boxShadow: isDark ? 'none' : '0 1px 2px rgba(0,0,0,0.05)',
+    },
+    lessonRow: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '4px',
     },
     lessonNumBadge: {
       width: '28px',
@@ -857,22 +955,30 @@ function getThemeStyles(isDark: boolean): { [key: string]: React.CSSProperties }
       alignItems: 'center',
       fontWeight: 700,
       fontSize: '13px',
+      marginTop: '2px',
     },
     subjectTitle: {
       fontSize: '15px',
       fontWeight: 600,
       color: isDark ? '#f8fafc' : '#0f172a',
     },
+    roomBadge: {
+      fontSize: '12px',
+      color: isDark ? '#94a3b8' : '#64748b',
+      background: isDark ? '#0f172a' : '#f1f5f9',
+      padding: '2px 6px',
+      borderRadius: '4px',
+    },
     metaInfo: {
       fontSize: '12px',
       color: isDark ? '#94a3b8' : '#64748b',
-      marginTop: '2px',
+      marginTop: '4px',
     },
     btnAction: {
       background: 'none',
       border: 'none',
       color: isDark ? '#94a3b8' : '#64748b',
-      padding: '6px',
+      padding: '4px',
       borderRadius: '6px',
       cursor: 'pointer',
       display: 'flex',
