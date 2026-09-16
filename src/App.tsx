@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 
 // === ТИПИ ===
 export interface User {
@@ -683,6 +684,7 @@ const App: React.FC = () => {
           </div>
         )}
       </main>
+      <Analytics />
     </div>
   );
 };
